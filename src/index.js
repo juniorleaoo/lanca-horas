@@ -12,29 +12,11 @@ const init = async () => {
         await logar(page);
         await irParaTelaCalendario(page);
         await abrirModalParaLancamentoDeHoras(page);
-
-        let formulario = {};
-
-        let formularioValido = true;
-
-        do {
-            formulario = await obterInformacoesNecessarias(page);
-
-            const {confirmacao} = await inquirer.prompt([{
-                type: 'confirm',
-                message: 'Formulário está correto?',
-                name: 'confirmacao',
-                default: true
-            }]);
-            formularioValido = confirmacao;
-
-        } while (!formularioValido);
-
-        await preencherFormulario(page, formulario);
-
+        await preencherFormulario(page);
         await salvarFormulario(page);
 
         await page.close();
+        await browser.close();
 
     } catch (e) {
         console.error(e);
@@ -43,24 +25,38 @@ const init = async () => {
 
 init();
 
-const obterInformacoesNecessarias = async (page) => {
-    await selecionarCliente(page);
-    await preencherData(page);
-    await selecionarProjeto(page);
-    await selecionarFase(page);
-    await selecionarAtividade(page);
+const obterInformacoesNecessarias = async (page, isDefault) => {
+    await selecionarCliente(page, isDefault);
+    await preencherData(page, isDefault);
+    await selecionarProjeto(page, isDefault);
+    await selecionarFase(page, isDefault);
+    await selecionarAtividade(page, isDefault);
 
     const formulario = {};
 
-    formulario.horaInicio = await getHoraInicio(page);
-    formulario.horaInicioIntervalo = await getHoraInicioIntervalo(page);
-    formulario.horaFimIntervalo = await getHoraFimIntervalo(page);
-    formulario.horaFim = await getHoraFim(page);
-    formulario.narrativaPrincipal = await getNarrativaPrincipal(page);
+    const {
+        DEFAULT_HORA_INICIO,
+        DEFAULT_HORA_INICIO_INTERVALO,
+        DEFAULT_HORA_FIM_INTERVALO,
+        DEFAULT_HORA_FIM,
+        DEFAULT_NARRATIVA
+    } = process.env;
+    formulario.horaInicio = DEFAULT_HORA_INICIO;
+    formulario.horaInicioIntervalo = DEFAULT_HORA_INICIO_INTERVALO;
+    formulario.horaFimIntervalo = DEFAULT_HORA_FIM_INTERVALO;
+    formulario.horaFim = DEFAULT_HORA_FIM;
+    formulario.narrativaPrincipal = DEFAULT_NARRATIVA;
+
+    if (!isDefault) {
+        formulario.horaInicio = await getHoraInicio(page);
+        formulario.horaInicioIntervalo = await getHoraInicioIntervalo(page);
+        formulario.horaFimIntervalo = await getHoraFimIntervalo(page);
+        formulario.horaFim = await getHoraFim(page);
+        formulario.narrativaPrincipal = await getNarrativaPrincipal(page);
+    }
 
     return formulario;
 }
-
 
 const acessarVMulti = async (page) => {
     console.log('== Acessando VMulti');
@@ -93,9 +89,14 @@ const abrirModalParaLancamentoDeHoras = async (page) => {
     await page.waitForSelector('css=span >> text=Realizando Lançamento');
 }
 
-const selecionarCliente = async (page) => {
+const selecionarCliente = async (page, isDefault) => {
     await page.click('//*[@id="namecliente_form_lanctos"]');
     await page.waitForSelector('css=th >> text=Nome do Cliente');
+
+    if (isDefault) {
+        await page.click('css=td >> text=' + process.env.DEFAULT_CLIENTE);
+        return;
+    }
 
     const {codigoCliente} = await inquirer.prompt([{
         type: 'list',
@@ -108,25 +109,38 @@ const selecionarCliente = async (page) => {
     await page.click('css=td >> text=' + codigoCliente);
 }
 
-const preencherData = async (page) => {
+const preencherData = async (page, isDefault) => {
+    const dataHoje = new Date().toLocaleDateString();
+
+    if (isDefault) {
+        await page.fill('//*[@id="f_data_b"]', dataHoje);
+        return;
+    }
+
     const {data} = await inquirer.prompt([{
         type: 'input',
         message: 'Digite a data',
-        default: new Date().toLocaleDateString(),
+        default: dataHoje,
         name: 'data'
     }]);
 
     await page.fill('//*[@id="f_data_b"]', data);
 }
 
-const selecionarProjeto = async (page) => {
+const selecionarProjeto = async (page, isDefault) => {
     await page.click('//*[@id="nameprojeto_form_lanctos"]');
     await page.waitForSelector('css=th >> text=Nome do Projeto');
+
+    if (isDefault) {
+        await page.click('css=td >> text=' + process.env.DEFAULT_PROJETO);
+        return;
+    }
 
     const {codigoProjeto} = await inquirer.prompt([{
         type: 'list',
         message: 'Selecione o projeto',
         name: 'codigoProjeto',
+        default: process.env.DEFAULT_PROJETO,
         choices: await extrairEscolhasDaTabela(page)
     }]);
 
@@ -174,7 +188,12 @@ const listarFases = async (page) => {
     });
 }
 
-const selecionarFase = async (page) => {
+const selecionarFase = async (page, isDefault) => {
+    if (isDefault) {
+        await page.selectOption('//*[@id="idtarefa_utbms"]', process.env.DEFAULT_FASE);
+        return;
+    }
+
     const {escolha: fase} = await inquirer.prompt([{
         type: 'list',
         message: 'Selecione a fase',
@@ -201,7 +220,12 @@ const listarAtividades = async (page) => {
     });
 }
 
-const selecionarAtividade = async (page) => {
+const selecionarAtividade = async (page, isDefault) => {
+    if (isDefault) {
+        await page.selectOption('//*[@id="idatividade_utbms"]', process.env.DEFAULT_ATIVIDADE);
+        return;
+    }
+
     const {escolha: atividade} = await inquirer.prompt([{
         type: 'list',
         message: 'Selecione a atividade',
@@ -212,7 +236,36 @@ const selecionarAtividade = async (page) => {
     await page.selectOption('//*[@id="idatividade_utbms"]', atividade.id);
 }
 
-const preencherFormulario = async (page, formulario) => {
+const preencherFormulario = async (page) => {
+    let formulario = {};
+
+    const {isDefault} = await inquirer.prompt([{
+        type: 'confirm',
+        message: 'Preencher com informações default?',
+        name: 'isDefault',
+        default: true
+    }]);
+
+    let formularioValido = true;
+
+    do {
+        formulario = await obterInformacoesNecessarias(page, isDefault);
+
+        if (isDefault) {
+            formularioValido = true;
+
+        } else {
+            const {confirmacao} = await inquirer.prompt([{
+                type: 'confirm',
+                message: 'Formulário está correto?',
+                name: 'confirmacao',
+                default: true
+            }]);
+            formularioValido = confirmacao;
+        }
+
+    } while (!formularioValido);
+
     await page.fill('//*[@id="hora"]', formulario.horaInicio);
     await page.fill('//*[@id="intervalo_hr_inicial"]', formulario.horaInicioIntervalo);
     await page.fill('//*[@id="intervalo_hr_final"]', formulario.horaFimIntervalo);
@@ -237,7 +290,7 @@ const getHoraFim = async () => {
 }
 
 const getNarrativaPrincipal = async () => {
-    return await getInput({message: 'Narrativa Principal'});
+    return await getInput({message: 'Narrativa Principal', defaultValue: process.env.DEFAULT_NARRATIVA});
 }
 
 const getInput = async ({message, required = true, defaultValue}) => {
