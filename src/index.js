@@ -310,4 +310,12 @@ const salvarFormulario = async (page) => {
     console.log('== Salvando');
 
     await page.click('css=span >> text=Salvar');
+
+    await page.waitForTimeout(5000);
+
+    const isFormularioSalvo = await page.isVisible("div .ui-dialog");
+
+    if(!isFormularioSalvo){
+        console.log('== Formulário salvo com sucesso!')
+    }
 }
